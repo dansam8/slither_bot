@@ -21,11 +21,12 @@ class slither_bot():
                  ray_starting_distance=30,
                  ray_length=300,
                  ray_point_space=10,
-                 center_point={"x": 845, "y": 427},
+                 center_point={"x": 640, "y": 436},
                  colour_threshhold=200,  # minimum sum of rbg to classify as object
-                 maximum_turn_per_frame=10,  # maximum degree adjustment per cycle
-                 frame_capture_rate=0,  # 0 for every frame and None to not use
-                 debug=False
+                 maximum_turn_per_frame=12,  # maximum degree adjustment per cycle
+                 frame_capture_rate=0.5,  # 0 for every frame and None to not use
+                 debug=False,
+                 predator_min_size=300
                  ):
 
         if 90 % degrees_per_ray != 0:
@@ -40,6 +41,7 @@ class slither_bot():
         self.maximum_turn_per_frame = maximum_turn_per_frame
         self.frame_capture_rate = frame_capture_rate
         self.debug = debug
+        self.predator_min_size = predator_min_size
 
         self.monitor = {'top': 0, 'left': 0, 'width': 1280, 'height': 800}
         self.save_counter = 0
@@ -68,10 +70,8 @@ class slither_bot():
         rays_per_quadrant = int(90 / degrees_per_ray)
 
         if self.debug:
-            arr = np.zeros((int(360 / degrees_per_ray), int((ray_length - ray_starting_distance) / ray_point_space)), 'uint8')
-            arr[30][10] = 3
-            # print(arr)
-            # exit() 0 18 36 54
+            arr = np.ones((int(360 / degrees_per_ray), int((ray_length - ray_starting_distance) / ray_point_space)), 'uint8')
+            #arr = arr * 2
             return arr
 
         ray_list = []
@@ -81,11 +81,7 @@ class slither_bot():
                 ray_list.append([])
                 for ray_point in range(int((ray_length - ray_starting_distance) / ray_point_space)):
 
-                    # if quadrant in [1, 3]:
                     ray_actual = rays_per_quadrant - ray if (quadrant in [1, 3]) else ray
-                    # else:
-                    #    ray_actual = ray
-
                     point_distance = ray_point * ray_point_space + ray_starting_distance
 
                     # get coordinates of ray point
@@ -151,24 +147,23 @@ class slither_bot():
 
                     cluster_distance_from_center = np.amin(list_positions_of_ones_in_cluster, axis=0)[0]
 
-                    # add food threshold where each ring has its own factor
+                    total_size_score = 0
+                    for pos in list_positions_of_ones_in_cluster:
 
-                    if cluster_distance_from_center < 6:
-                        food_threshhold = [25, 3]
-                    elif cluster_distance_from_center < 12:
-                        food_threshhold = [13, 1]
-                    else:
-                        food_threshhold = [6, 0]
+                        degrees = np.float64(360 / len(ray_list))
+                        disance_from_center = np.float64(self.ray_starting_distance + (self.ray_point_space * pos[0]))
+                        distance_between_points = np.tan(degrees * np.pi / 180) * disance_from_center
+                        total_size_score += distance_between_points
 
-                    if len(list_positions_of_ones_in_cluster) > food_threshhold[0]:
+                    cluster_distance_from_center = np.amin(list_positions_of_ones_in_cluster, axis=0)[0]
+
+                    if total_size_score > self.predator_min_size:
                         if cluster_distance_from_center == 0:
                             kind = 6  # assumes that this is its own tail
                         else:
                             kind = 3  # part of predator
-                    elif len(list_positions_of_ones_in_cluster) > food_threshhold[1]:
-                        kind = 2  # part of food
                     else:
-                        kind = 1  # can be ignored
+                        kind = 2
 
                     for i in list_positions_of_ones_in_cluster:
                         ray_list[i[1]][i[0]] = kind
@@ -179,17 +174,12 @@ class slither_bot():
         """sets food that is out of turning range to ignore value"""
 
         ray_current_direction = int(current_direction / 360) * (len(ray_list) - 1)
-        if ray_current_direction > 71 or ray_current_direction < 0:
-            print(ray_current_direction)
-            print(len(ray_list))
-            print(current_direction)
-            exit()
-        food_remove_section = [int(ray_current_direction + len(ray_list) / 8), int(ray_current_direction - len(ray_list) / 8)]
+
+        food_remove_section = [int(ray_current_direction + len(ray_list) / 15), int(ray_current_direction - len(ray_list) / 15)]
 
         if food_remove_section[1] < 0:
             food_remove_section[1] += len(ray_list) - 1
         if food_remove_section[0] > len(ray_list) - 1:
-
             food_remove_section[0] += -(len(ray_list) - 1)
 
         list_of_rays_to_change = []
@@ -209,6 +199,7 @@ class slither_bot():
             for j in list_of_rays_to_change:
                 if ray_list[j][i] == 2:
                     ray_list[j][i] = 6
+            list_of_rays_to_change = list_of_rays_to_change[1:-1]
 
         return ray_list
 
@@ -397,7 +388,6 @@ class slither_bot():
                 f.write(str(data_arr[1]) + "\n")
                 f.close()
             img.save("capture/render" + str(i) + ".jpeg")
-            print("save " + str(i))
             i += 1
             print(i)
 
@@ -439,5 +429,5 @@ class slither_bot():
 
 
 snake = slither_bot()
-snake.render()
-# snake.play()
+# snake.render()
+snake.play()
